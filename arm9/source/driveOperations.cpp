@@ -7,6 +7,7 @@
 #include "dldi-include.h"
 
 static sNDSHeader nds;
+const DLDI_INTERFACE* loadedDldi;
 
 u8 stored_SCFG_MC = 0;
 
@@ -143,8 +144,6 @@ TWL_CODE void ShowGameInfo(const char gameid[], const char gamename[]) {
 
 TWL_CODE bool twl_flashcardMount(void) {
 	if (REG_SCFG_MC != 0x11) {
-		setCpuClock(false); //REG_SCFG_CLK = 0x80;	// Set NTR clock speed to avoid potential timing issues
-
 		sysSetCardOwner (BUS_OWNER_ARM9);
 
 		// Reset Slot-1 to allow reading title name and ID
@@ -176,24 +175,35 @@ TWL_CODE bool twl_flashcardMount(void) {
 		sysSetCardOwner (BUS_OWNER_ARM7);	// 3DS fix
 
 		// Read a DLDI driver specific to the cart
-		if (!memcmp(gamename, "QMATETRIAL", 9) || !memcmp(gamename, "R4DSULTRA", 9)) {
-			io_dldi_data = dldiLoadFromBin(r4idsn_sd_dldi);
-			fatMountSimple("fat", &io_dldi_data->ioInterface);
-		} else if (!memcmp(gameid, "ACEK", 4) || !memcmp(gameid, "YCEP", 4) || !memcmp(gameid, "AHZH", 4)) {
-			io_dldi_data = dldiLoadFromBin(ak2_sd_dldi);
-			fatMountSimple("fat", &io_dldi_data->ioInterface);
-		} else if (!memcmp(gameid, "ASMA", 4)) {
-			io_dldi_data = dldiLoadFromBin(r4tf_dldi);
-			fatMountSimple("fat", &io_dldi_data->ioInterface);        
+		if (!memcmp(gameid, "ASMA", 4)) {
+			loadedDldi = dldiLoadFromBin(r4tf_dldi);
+			loadedDldi->ioInterface.startup();
+			fatMountSimple("fat", &loadedDldi->ioInterface);      
         } else if (!memcmp(gamename, "TOP TF/SD DS", 12) || !memcmp(gameid, "A76E", 4)) {
-			io_dldi_data = dldiLoadFromBin(ttio_dldi);
-			fatMountSimple("fat", &io_dldi_data->ioInterface);        
-        } else if (!memcmp(gamename, "D!S!XTREME", 12) && !memcmp(gameid, "AYIE", 4)) {
-			io_dldi_data = dldiLoadFromBin(dsx_dldi);
-			fatMountSimple("fat", &io_dldi_data->ioInterface);        
-        } 
-
-		setCpuClock(true);
+			loadedDldi = dldiLoadFromBin(ttio_dldi);
+			loadedDldi->ioInterface.startup();
+			fatMountSimple("fat", &loadedDldi->ioInterface);
+ 		} else if (!memcmp(gamename, "PASS", 4) && !memcmp(gameid, "ASME", 4)) {
+			loadedDldi = dldiLoadFromBin(CycloEvo_dldi);
+			loadedDldi->ioInterface.startup();
+			fatMountSimple("fat", &loadedDldi->ioInterface);
+		} else if (!memcmp(gamename, "D!S!XTREME", 12) && !memcmp(gameid, "AYIE", 4)) {
+			loadedDldi = dldiLoadFromBin(dsx_dldi);
+			loadedDldi->ioInterface.startup();
+			fatMountSimple("fat", &loadedDldi->ioInterface); 
+        } else if (!memcmp(gamename, "QMATETRIAL", 9) || !memcmp(gamename, "R4DSULTRA", 9)) {
+			loadedDldi = dldiLoadFromBin(r4idsn_sd_dldi);
+			loadedDldi->ioInterface.startup();
+			fatMountSimple("fat", &loadedDldi->ioInterface);
+		} else if (!memcmp(gameid, "ACEK", 4) || !memcmp(gameid, "YCEP", 4) || !memcmp(gameid, "AHZH", 4)) {
+			loadedDldi = dldiLoadFromBin(ak2_sd_dldi);
+			loadedDldi->ioInterface.startup();
+			fatMountSimple("fat", &loadedDldi->ioInterface);
+		} else if (!memcmp(gameid, "ALXX", 4)) {
+			loadedDldi = dldiLoadFromBin(dstwo_dldi);
+			loadedDldi->ioInterface.startup();
+			fatMountSimple("fat", &io_dldi_data->ioInterface);
+		}
 
 		if (flashcardFound()) {
 			fatGetVolumeLabel("fat", fatLabel);
@@ -224,6 +234,10 @@ bool flashcardMount(void) {
 
 void flashcardUnmount(void) {
 	fatUnmount("fat");
+	if (isDSiMode()) {
+		loadedDldi->ioInterface.shutdown();
+		dldiFree((DLDI_INTERFACE*)loadedDldi);
+	}
 	fatLabel[0] = '\0';
 	flashcardMounted = false;
 }
